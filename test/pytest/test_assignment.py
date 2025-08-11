@@ -1,279 +1,146 @@
-# test/pytest/test_assignment.py
+# tests/unit/test_assignment_service.py
 import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
-import app.services.assignment as mod
+from app.services.assignment import (
+    create_assignment, list_assignments, get_assignment, delete_assignment
+)
 from app.schemas.assignment import AssignmentCreate, Assignment
+from app.schemas.context import UserContext
 
-# ---------- DOPPIO Finto: Repository ----------
 
-class FakeRepo:
+# ------------------------- Fake repository (minimale) -------------------------
+class FakeAssignmentRepo:
     def __init__(self):
-        self.created = []
-        self.deleted_ids = set()
-        self.docs_by_id = {}
-        self.teacher_docs = {}
-        self.student_docs = {}
+        self.items: dict[str, Assignment] = {}
 
-    async def create(self, doc):
-        self.created.append(doc)
-        self.docs_by_id[doc["_id"]] = doc
+    async def create(self, data: AssignmentCreate, *, teacher_id: str) -> str:
+        from uuid import uuid4
+        new_id = str(uuid4())
+        a = Assignment(
+            id=new_id,
+            createdAt=datetime.now(timezone.utc),
+            teacherId=teacher_id,
+            **data.model_dump(),
+        )
+        self.items[new_id] = a
+        return new_id
 
-    async def find_for_teacher(self, teacher_id):
-        return self.teacher_docs.get(teacher_id, [])
+    async def find_for_teacher(self, teacher_id: str):
+        return [a for a in self.items.values() if a.teacherId == teacher_id]
 
-    async def find_for_student(self, student_id):
-        return self.student_docs.get(student_id, [])
+    async def find_for_student(self, student_id: str):
+        return [a for a in self.items.values() if student_id in getattr(a, "students", [])]
 
-    async def find_one(self, assignment_id):
-        return self.docs_by_id.get(assignment_id)
+    async def find_one(self, assignment_id: str):
+        return self.items.get(assignment_id)
 
-    async def delete(self, assignment_id):
-        if assignment_id in self.docs_by_id:
-            del self.docs_by_id[assignment_id]
-            self.deleted_ids.add(assignment_id)
-            return True
-        return False
-
-
-# ---------- DOPPIO Finto: UserContext (solo quello) ----------
-
-class FakeUserContext:
-    def __init__(self, user_id, role: str):
-        self.user_id = user_id
-        self.role = role  # "teacher" | "student" | ...
+    async def delete(self, assignment_id: str):
+        return self.items.pop(assignment_id, None) is not None
 
 
+# ------------------------------- Fixtures -------------------------------------
 @pytest.fixture
 def repo():
-    return FakeRepo()
+    return FakeAssignmentRepo()
+
+@pytest.fixture
+def teacher():
+    return UserContext(user_id="t1", role="teacher")
+
+@pytest.fixture
+def other_teacher():
+    return UserContext(user_id="t2", role="teacher")
+
+@pytest.fixture
+def student():
+    return UserContext(user_id="s1", role="student")
+
+@pytest.fixture
+def student2():
+    return UserContext(user_id="s2", role="student")
 
 
-@pytest.fixture(autouse=True)
-def patch_dependencies(monkeypatch):
-    # Manteniamo i modelli veri di AssignmentCreate e Assignment (non strettamente necessario, ma esplicito)
-    monkeypatch.setattr(mod, "AssignmentCreate", AssignmentCreate, raising=True)
-    monkeypatch.setattr(mod, "Assignment", Assignment, raising=True)
-    # UserContext finto per evitare dipendenze da auth reale (opzionale)
-    monkeypatch.setattr(mod, "UserContext", FakeUserContext, raising=True)
-
-
-# ---------- TEST: create_assignment ----------
-
-@pytest.mark.asyncio
-async def test_create_assignment_happy_path(repo):
-    future_deadline = datetime.now(timezone.utc) + timedelta(days=7)
-    data = mod.AssignmentCreate(
-        title="Compito 1",
+def _make_create(**overrides):
+    future = datetime.now(timezone.utc) + timedelta(days=7)
+    base = dict(
+        title="Compito",
         description="Desc",
-        deadline=future_deadline,
-        students=["s1", "s2"],
+        deadline=future,
+        students=[],
         content="Testo",
     )
-    user = FakeUserContext(user_id="t1", role="teacher")
-
-    new_id = await mod.create_assignment(data, user, repo=repo)
-    assert new_id in repo.docs_by_id
-
-    saved = repo.docs_by_id[new_id]
-    assert saved["teacherId"] == "t1"
-    assert saved["title"] == "Compito 1"
-    assert saved["deadline"] == future_deadline
-    assert isinstance(saved["createdAt"], datetime)
-    assert saved["createdAt"].tzinfo is not None
+    base.update(overrides)
+    return AssignmentCreate(**base)
 
 
+# --------------------------------- Tests --------------------------------------
 @pytest.mark.asyncio
-async def test_create_assignment_requires_teacher(repo):
-    future_deadline = datetime.now(timezone.utc) + timedelta(days=7)
-    data = mod.AssignmentCreate(
-        title="Compito 1",
-        description="Desc",
-        deadline=future_deadline,
-        students=["s1"],
-        content="X",
-    )
-    user = FakeUserContext(user_id="u1", role="student")
+async def test_create_requires_teacher(repo, student):
     with pytest.raises(PermissionError):
-        await mod.create_assignment(data, user, repo=repo)
-
-
-# ---------- TEST: list_assignments ----------
+        await create_assignment(_make_create(), student, repo)
 
 @pytest.mark.asyncio
-async def test_list_assignments_for_teacher(repo):
-    repo.teacher_docs["t1"] = [
-        {
-            "_id": "a1",
-            "teacherId": "t1",
-            "title": "C1",
-            "description": "D",
-            "deadline": datetime.now(timezone.utc),
-            "students": [],
-            "content": "X",
-            "createdAt": datetime.now(timezone.utc),
-        }
-    ]
-    user = FakeUserContext(user_id="t1", role="teacher")
-    items = await mod.list_assignments(user, repo=repo)
+async def test_create_ok(repo, teacher):
+    new_id = await create_assignment(_make_create(students=["s1", "s2"]), teacher, repo)
+    assert new_id
+    saved = await repo.find_one(new_id)
+    assert saved is not None
+    assert saved.teacherId == "t1"
+    assert saved.students == ["s1", "s2"]
+
+@pytest.mark.asyncio
+async def test_list_for_teacher(repo, teacher, other_teacher):
+    # seed
+    a1 = await repo.create(_make_create(title="A"), teacher_id=teacher.user_id)
+    a2 = await repo.create(_make_create(title="B"), teacher_id=teacher.user_id)
+    _  = await repo.create(_make_create(title="C"), teacher_id=other_teacher.user_id)
+
+    items = await list_assignments(teacher, repo)
+    ids = {a.id for a in items}
+    titles = {a.title for a in items}
+    assert {a1, a2}.issubset(ids)
+    assert titles == {"A", "B"}
+
+@pytest.mark.asyncio
+async def test_list_for_student(repo, teacher, student):
+    _ = await repo.create(_make_create(title="SoloS1", students=["s1"]), teacher_id=teacher.user_id)
+    _ = await repo.create(_make_create(title="SoloS2", students=["s2"]), teacher_id=teacher.user_id)
+
+    items = await list_assignments(student, repo)
     assert len(items) == 1
-    assert isinstance(items[0], mod.Assignment)
-    assert items[0].id == "a1"
-    assert items[0].title == "C1"
-
+    assert items[0].title == "SoloS1"
 
 @pytest.mark.asyncio
-async def test_list_assignments_for_student(repo):
-    repo.student_docs["s1"] = [
-        {
-            "_id": "a2",
-            "teacherId": "t1",
-            "title": "C2",
-            "description": "D",
-            "deadline": datetime.now(timezone.utc),
-            "students": ["s1"],
-            "content": "X",
-            "createdAt": datetime.now(timezone.utc),
-        }
-    ]
-    user = FakeUserContext(user_id="s1", role="student")
-    items = await mod.list_assignments(user, repo=repo)
-    assert len(items) == 1
-    assert isinstance(items[0], mod.Assignment)
-    assert items[0].id == "a2"
-
-
-@pytest.mark.asyncio
-async def test_list_assignments_other_role_returns_empty(repo):
-    user = FakeUserContext(user_id="x", role="admin")
-    items = await mod.list_assignments(user, repo=repo)
+async def test_list_other_role_returns_empty(repo, teacher):
+    other = UserContext(user_id="x1", role="admin")
+    _ = await repo.create(_make_create(title="A"), teacher_id=teacher.user_id)
+    items = await list_assignments(other, repo)
     assert items == []
 
-
-# ---------- TEST: get_assignment ----------
-
 @pytest.mark.asyncio
-async def test_get_assignment_not_found(repo):
-    user = FakeUserContext(user_id="t1", role="teacher")
-    assert await mod.get_assignment("missing", user, repo=repo) is None
-
-
-@pytest.mark.asyncio
-async def test_get_assignment_teacher_access_ok(repo):
-    repo.docs_by_id["a3"] = {
-        "_id": "a3",
-        "teacherId": "t1",
-        "title": "C3",
-        "description": "D",
-        "deadline": datetime.now(timezone.utc),
-        "students": ["s1"],
-        "content": "X",
-        "createdAt": datetime.now(timezone.utc),
-    }
-    user = FakeUserContext(user_id="t1", role="teacher")
-    item = await mod.get_assignment("a3", user, repo=repo)
-    assert isinstance(item, mod.Assignment)
-    assert item.id == "a3"
-    assert item.title == "C3"
-
-
-@pytest.mark.asyncio
-async def test_get_assignment_teacher_access_denied(repo):
-    repo.docs_by_id["a4"] = {
-        "_id": "a4",
-        "teacherId": "t1",
-        "title": "C4",
-        "description": "D",
-        "deadline": datetime.now(timezone.utc),
-        "students": [],
-        "content": "X",
-        "createdAt": datetime.now(timezone.utc),
-    }
-    user = FakeUserContext(user_id="t2", role="teacher")
+async def test_get_teacher_access_ok(repo, teacher, other_teacher):
+    aid = await repo.create(_make_create(title="X"), teacher_id=teacher.user_id)
+    item = await get_assignment(aid, teacher, repo)
+    assert item is not None
     with pytest.raises(PermissionError):
-        await mod.get_assignment("a4", user, repo=repo)
-
-
-@pytest.mark.asyncio
-async def test_get_assignment_student_access_ok(repo):
-    repo.docs_by_id["a5"] = {
-        "_id": "a5",
-        "teacherId": "t1",
-        "title": "C5",
-        "description": "D",
-        "deadline": datetime.now(timezone.utc),
-        "students": ["s1"],
-        "content": "X",
-        "createdAt": datetime.now(timezone.utc),
-    }
-    user = FakeUserContext(user_id="s1", role="student")
-    item = await mod.get_assignment("a5", user, repo=repo)
-    assert isinstance(item, mod.Assignment)
-    assert item.id == "a5"
-
+        await get_assignment(aid, other_teacher, repo)
 
 @pytest.mark.asyncio
-async def test_get_assignment_student_access_denied(repo):
-    repo.docs_by_id["a6"] = {
-        "_id": "a6",
-        "teacherId": "t1",
-        "title": "C6",
-        "description": "D",
-        "deadline": datetime.now(timezone.utc),
-        "students": ["s2"],
-        "content": "X",
-        "createdAt": datetime.now(timezone.utc),
-    }
-    user = FakeUserContext(user_id="s1", role="student")
+async def test_get_student_access_ok_and_denied(repo, teacher, student, student2):
+    aid = await repo.create(_make_create(title="X", students=["s1"]), teacher_id=teacher.user_id)
+    ok = await get_assignment(aid, student, repo)
+    assert ok is not None
     with pytest.raises(PermissionError):
-        await mod.get_assignment("a6", user, repo=repo)
-
-
-# ---------- TEST: delete_assignment ----------
+        await get_assignment(aid, student2, repo)
 
 @pytest.mark.asyncio
-async def test_delete_assignment_requires_teacher(repo):
-    user = FakeUserContext(user_id="x", role="student")
+async def test_delete_requires_teacher(repo, student):
     with pytest.raises(PermissionError):
-        await mod.delete_assignment("a1", user, repo=repo)
+        await delete_assignment("non-existent", student, repo)
 
 @pytest.mark.asyncio
-async def test_delete_assignment_ok(repo):
-    repo.docs_by_id["a7"] = {
-        "_id": "a7",
-        "teacherId": "t1",
-        "title": "C7",
-        "description": "D",
-        "deadline": datetime.now(timezone.utc),
-        "students": [],
-        "content": "X",
-        "createdAt": datetime.now(timezone.utc),
-    }
-    user = FakeUserContext(user_id="t1", role="teacher")
-    ok = await mod.delete_assignment("a7", user, repo=repo)
-    assert ok is True
-    assert "a7" not in repo.docs_by_id
-
-@pytest.mark.asyncio
-async def test_delete_assignment_not_found(repo):
-    user = FakeUserContext(user_id="t1", role="teacher")
-    ok = await mod.delete_assignment("missing", user, repo=repo)
-    assert ok is False
-
-
-# ---------- TEST: _from_mongo (funzione interna) ----------
-
-def test__from_mongo_converts_id():
-    doc = {
-        "_id": "x1",
-        "title": "C8",
-        "description": "D",
-        "deadline": datetime.now(timezone.utc),
-        "students": [],
-        "content": "X",
-        "teacherId": "t1",
-        "createdAt": datetime.now(timezone.utc),
-    }
-    out = mod._from_mongo(doc)
-    assert out["id"] == "x1"
-    assert "_id" not in out
+async def test_delete_ok_and_not_found(repo, teacher):
+    aid = await repo.create(_make_create(), teacher_id=teacher.user_id)
+    assert await delete_assignment(aid, teacher, repo) is True
+    assert await delete_assignment(aid, teacher, repo) is False

@@ -1,12 +1,7 @@
-# app/services/assignment.py
-from uuid import uuid4
-from datetime import datetime, timezone
+from typing import Sequence, Optional
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
-from app.database.assignment_repo import assignment_repo as _default_repo
-
-def _get_repo():
-    return _default_repo
+from app.database.assignment import AssignmentRepo
 
 def _is_teacher(role):
     return role == "teacher" or (isinstance(role, (list, tuple, set)) and "teacher" in role)
@@ -14,50 +9,29 @@ def _is_teacher(role):
 def _is_student(role):
     return role == "student" or (isinstance(role, (list, tuple, set)) and "student" in role)
 
-def _from_mongo(doc: dict) -> dict:
-    out = dict(doc)
-    out["id"] = str(out["_id"])
-    out.pop("_id", None)
-    return out
-
-async def create_assignment(data: AssignmentCreate, user: UserContext, repo=None) -> str:
+async def create_assignment(data: AssignmentCreate, user: UserContext, repo: AssignmentRepo) -> str:
     if not _is_teacher(user.role):
         raise PermissionError("Only teachers can create assignments")
-    repo = repo or _get_repo()
+    return await repo.create(data, teacher_id=user.user_id)
 
-    new_id = str(uuid4())
-    assignment_dict = {
-        "_id": new_id,
-        "createdAt": datetime.now(timezone.utc),
-        "teacherId": user.user_id,
-        **data.model_dump(),
-    }
-    await repo.create(assignment_dict)
-    return new_id
-
-async def list_assignments(user: UserContext, repo=None):
-    repo = repo or _get_repo()
+async def list_assignments(user: UserContext, repo: AssignmentRepo) -> Sequence[Assignment]:
     if _is_teacher(user.role):
-        docs = await repo.find_for_teacher(user.user_id)
-    elif _is_student(user.role):
-        docs = await repo.find_for_student(user.user_id)
-    else:
-        return []
-    return [Assignment(**_from_mongo(d)) for d in docs]
+        return await repo.find_for_teacher(user.user_id)
+    if _is_student(user.role):
+        return await repo.find_for_student(user.user_id)
+    return []
 
-async def get_assignment(assignment_id: str, user: UserContext, repo=None):
-    repo = repo or _get_repo()
+async def get_assignment(assignment_id: str, user: UserContext, repo: AssignmentRepo) -> Optional[Assignment]:
     doc = await repo.find_one(assignment_id)
     if not doc:
         return None
-    if _is_teacher(user.role) and doc.get("teacherId") != user.user_id:
+    if _is_teacher(user.role) and doc.teacherId != user.user_id:
         raise PermissionError("Accesso negato all'assignment")
-    if _is_student(user.role) and user.user_id not in doc.get("students", []):
+    if _is_student(user.role) and user.user_id not in getattr(doc, "students", []):
         raise PermissionError("Non sei tra gli studenti assegnati")
-    return Assignment(**_from_mongo(doc))
+    return doc
 
-async def delete_assignment(assignment_id: str, user: UserContext, repo=None) -> bool:
+async def delete_assignment(assignment_id: str, user: UserContext, repo: AssignmentRepo) -> bool:
     if not _is_teacher(user.role):
         raise PermissionError("Only teachers can delete assignments")
-    repo = repo or _get_repo()
     return await repo.delete(assignment_id)
