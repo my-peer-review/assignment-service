@@ -17,7 +17,7 @@ pipeline {
             --user "$(id -u)":"$(id -g)" \
             -e ENV="unit-test" \
             -v "${PWD}:/work" -w /work \
-            "${CI_IMAGE_NAME}" pytest -v test/pytest
+            "${CI_IMAGE_NAME}" sh -c 'pytest -v test/pytest && rm -rf .pytest_cache'
         '''
       }
     }
@@ -66,8 +66,8 @@ pipeline {
     failure { echo '❌ KO: controlla i log (unit/push/integrazione).' }
     always  {
       sh '''
-        chmod -R u+rwX . || true
         rm -rf .pytest_cache || true
+        sh sudo chown -R $(id -u):$(id -g) . || true
       '''
       deleteDir()
     }

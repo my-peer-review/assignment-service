@@ -4,7 +4,8 @@ FROM python:3.11-slim
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/work
+    PYTHONPATH=/work \
+    PYTEST_DISABLE_PLUGIN_CACHE=1
 
 # Directory di lavoro nel container
 WORKDIR /work
