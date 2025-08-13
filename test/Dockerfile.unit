@@ -11,7 +11,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 WORKDIR /work
 
 # Copia i requirements di sviluppo
-COPY requirements-dev.txt requirements-dev.txt
+COPY test/requirements-dev.txt requirements-dev.txt
 
 # Installa pip e dipendenze
 RUN python -m pip install --upgrade pip && \

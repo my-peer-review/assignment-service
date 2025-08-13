@@ -11,7 +11,7 @@ pipeline {
   stages {
     stage('Build CI Image & Unit Tests') {
       steps {
-        sh 'docker build -t "${CI_IMAGE_NAME}" -f Dockerfile.unit .'
+        sh 'docker build -t "${CI_IMAGE_NAME}" -f ./test/Dockerfile.unit .'
         sh '''
           docker run --rm \
             --user "$(id -u)":"$(id -g)" \
