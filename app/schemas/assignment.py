@@ -10,6 +10,6 @@ class AssignmentCreate(BaseModel):
     content: str
 
 class Assignment(AssignmentCreate):
-    id: str
+    assignmentId: str
     teacherId: str
     createdAt: datetime

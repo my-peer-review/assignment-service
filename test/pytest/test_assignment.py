@@ -2,9 +2,7 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from app.services.assignment import (
-    create_assignment, list_assignments, get_assignment, delete_assignment
-)
+from app.services.assignment import AssignmentService
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
 
@@ -18,7 +16,7 @@ class FakeAssignmentRepo:
         from uuid import uuid4
         new_id = str(uuid4())
         a = Assignment(
-            id=new_id,
+            assignmentId=new_id,
             createdAt=datetime.now(timezone.utc),
             teacherId=teacher_id,
             **data.model_dump(),
@@ -78,11 +76,11 @@ def _make_create(**overrides):
 @pytest.mark.asyncio
 async def test_create_requires_teacher(repo, student):
     with pytest.raises(PermissionError):
-        await create_assignment(_make_create(), student, repo)
+        await AssignmentService.create_assignment(_make_create(), student, repo)
 
 @pytest.mark.asyncio
 async def test_create_ok(repo, teacher):
-    new_id = await create_assignment(_make_create(students=["s1", "s2"]), teacher, repo)
+    new_id = await AssignmentService.create_assignment(_make_create(students=["s1", "s2"]), teacher, repo)
     assert new_id
     saved = await repo.find_one(new_id)
     assert saved is not None
@@ -96,8 +94,8 @@ async def test_list_for_teacher(repo, teacher, other_teacher):
     a2 = await repo.create(_make_create(title="B"), teacher_id=teacher.user_id)
     _  = await repo.create(_make_create(title="C"), teacher_id=other_teacher.user_id)
 
-    items = await list_assignments(teacher, repo)
-    ids = {a.id for a in items}
+    items = await AssignmentService.list_assignments(teacher, repo)
+    ids = {a.assignmentId for a in items}
     titles = {a.title for a in items}
     assert {a1, a2}.issubset(ids)
     assert titles == {"A", "B"}
@@ -107,7 +105,7 @@ async def test_list_for_student(repo, teacher, student):
     _ = await repo.create(_make_create(title="SoloS1", students=["s1"]), teacher_id=teacher.user_id)
     _ = await repo.create(_make_create(title="SoloS2", students=["s2"]), teacher_id=teacher.user_id)
 
-    items = await list_assignments(student, repo)
+    items = await AssignmentService.list_assignments(student, repo)
     assert len(items) == 1
     assert items[0].title == "SoloS1"
 
@@ -115,32 +113,32 @@ async def test_list_for_student(repo, teacher, student):
 async def test_list_other_role_returns_empty(repo, teacher):
     other = UserContext(user_id="x1", role="admin")
     _ = await repo.create(_make_create(title="A"), teacher_id=teacher.user_id)
-    items = await list_assignments(other, repo)
+    items = await AssignmentService.list_assignments(other, repo)
     assert items == []
 
 @pytest.mark.asyncio
 async def test_get_teacher_access_ok(repo, teacher, other_teacher):
     aid = await repo.create(_make_create(title="X"), teacher_id=teacher.user_id)
-    item = await get_assignment(aid, teacher, repo)
+    item = await AssignmentService.get_assignment(aid, teacher, repo)
     assert item is not None
     with pytest.raises(PermissionError):
-        await get_assignment(aid, other_teacher, repo)
+        await AssignmentService.get_assignment(aid, other_teacher, repo)
 
 @pytest.mark.asyncio
 async def test_get_student_access_ok_and_denied(repo, teacher, student, student2):
     aid = await repo.create(_make_create(title="X", students=["s1"]), teacher_id=teacher.user_id)
-    ok = await get_assignment(aid, student, repo)
+    ok = await AssignmentService.get_assignment(aid, student, repo)
     assert ok is not None
     with pytest.raises(PermissionError):
-        await get_assignment(aid, student2, repo)
+        await AssignmentService.get_assignment(aid, student2, repo)
 
 @pytest.mark.asyncio
 async def test_delete_requires_teacher(repo, student):
     with pytest.raises(PermissionError):
-        await delete_assignment("non-existent", student, repo)
+        await AssignmentService.delete_assignment("non-existent", student, repo)
 
 @pytest.mark.asyncio
 async def test_delete_ok_and_not_found(repo, teacher):
     aid = await repo.create(_make_create(), teacher_id=teacher.user_id)
-    assert await delete_assignment(aid, teacher, repo) is True
-    assert await delete_assignment(aid, teacher, repo) is False
+    assert await AssignmentService.delete_assignment(aid, teacher, repo) is True
+    assert await AssignmentService.delete_assignment(aid, teacher, repo) is False

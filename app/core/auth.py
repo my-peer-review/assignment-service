@@ -9,10 +9,7 @@ from app.schemas.context import UserContext
 security = HTTPBearer()
 
 JWT_ALGORITHM = settings.jwt_algorithm
-PUBLIC_KEY_PATH = settings.jwt_public_key_path
-
-with open(PUBLIC_KEY_PATH, "r") as f:
-    PUBLIC_KEY = f.read()
+PUBLIC_KEY = settings.jwt_public_key
 
 async def get_current_user(credentials=Depends(security)) -> UserContext:
     token = credentials.credentials

@@ -1,33 +1,15 @@
 import os
 from pydantic_settings import BaseSettings
 
-
 class Settings(BaseSettings):
-    env: str = "unit-test"
-
-    jwt_algorithm: str = ""
-    jwt_public_key_path: str = ""
-    jwt_private_key_path: str = ""
-    mongo_uri: str = ""
-    mongo_db_name: str = ""
+    env: str = os.getenv("ENV", "unit-test")
+    jwt_algorithm: str
+    jwt_public_key: str  # contiene direttamente la chiave, non un path
+    jwt_private_key: str
+    mongo_uri: str
+    mongo_db_name: str
 
     class Config:
-        env_file = None  # di default
+        env_file = None  # nessun file .env, solo ENV
 
-
-# Leggi ENV
-env = os.getenv("ENV", "unit-test")
-
-if env == "unit-test":
-    # Non carica nessun file, valori restano vuoti
-    settings = Settings()
-
-elif env == "test-integrazione":
-    settings = Settings(_env_file=".env.integration")
-
-elif env == "produzione":
-    settings = Settings(_env_file=".env.prod")
-
-else:
-    # fallback per eventuali ambienti locali di sviluppo
-    settings = Settings(_env_file=".env")
+settings = Settings()
