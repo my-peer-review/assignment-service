@@ -37,8 +37,8 @@ pipeline {
     stage('Build & Push App Image (:latest) — PR→main') {
       when {
         allOf {
-          changeRequest()                               // è una PR
-          expression { return env.CHANGE_TARGET == 'main' }  // target main
+          changeRequest()                              
+          expression { return env.CHANGE_TARGET == 'main' }
         }
       }
       steps {
