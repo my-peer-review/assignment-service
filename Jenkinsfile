@@ -55,7 +55,6 @@ pipeline {
                 parameters: [
                   string(name: 'SERVICE_NAME', value: 'assignment'),
                   string(name: 'TRIGGER_TYPE', value: 'single')
-                  // Non serve IMAGE_TAG: il cluster usa :latest con imagePullPolicy: Always
                 ]
         }
       }
@@ -66,7 +65,10 @@ pipeline {
     success { echo '✅ OK: unit, push (se PR→main) e integrazione passati.' }
     failure { echo '❌ KO: controlla i log (unit/push/integrazione).' }
     always  {
-      sh 'rm -rf .pytest_cache || true'
+      sh '''
+        chmod -R u+rwX . || true
+        rm -rf .pytest_cache || true
+      '''
       deleteDir()
     }
   }
