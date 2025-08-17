@@ -2,7 +2,7 @@
 FROM python:3.11-slim
 
 # --- Workdir ---
-WORKDIR /app
+WORKDIR /work
 RUN mkdir -p /var/run/secrets/kubernetes.io/serviceaccount
 
 # --- Install dependencies ---

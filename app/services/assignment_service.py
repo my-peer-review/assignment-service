@@ -1,7 +1,7 @@
 from typing import Sequence, Optional
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
-from app.database.assignment import AssignmentRepo
+from app.database.assignment_repo import AssignmentRepo
 
 def _is_teacher(role):
         return role == "teacher" or (isinstance(role, (list, tuple, set)) and "teacher" in role)

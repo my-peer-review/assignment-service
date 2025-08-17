@@ -6,7 +6,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.core.config import settings
 from app.database.mongo_assignment import MongoAssignmentRepository
-from app.routers.v1 import assignment_router, health_router
+from app.routers.v1 import health
+from app.routers.v1 import assignment
 
 def create_app() -> FastAPI:
     @asynccontextmanager
@@ -31,8 +32,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"], allow_headers=["*"],
     )
 
-    app.include_router(health_router.router,     prefix="/api/v1", tags=["health"])
-    app.include_router(assignment_router.router, prefix="/api/v1", tags=["assignments"])
+    app.include_router(health.router,     prefix="/api/v1", tags=["health"])
+    app.include_router(assignment.router, prefix="/api/v1", tags=["assignments"])
     return app
 
 app = create_app()

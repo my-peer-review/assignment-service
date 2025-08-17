@@ -4,7 +4,7 @@ from typing import Sequence, Optional, List
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from uuid import uuid4
 
-from app.database.assignment import AssignmentRepo
+from app.database.assignment_repo import AssignmentRepo
 from app.schemas.assignment import Assignment, AssignmentCreate
 
 
