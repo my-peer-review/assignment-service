@@ -4,10 +4,10 @@ from fastapi.responses import JSONResponse
 
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
-from app.database.assignment import AssignmentRepo
+from app.database.assignment_repo import AssignmentRepo
 from app.core.deps import get_repository          # <- spostato in core
 from app.core.auth import get_current_user        # <- la tua auth in core
-from app.services.assignment import AssignmentService
+from app.services.assignment_service import AssignmentService
 
 router = APIRouter()
 

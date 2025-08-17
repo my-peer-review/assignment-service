@@ -2,7 +2,7 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from app.services.assignment import AssignmentService
+from app.services.assignment_service import AssignmentService
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
 
