@@ -5,14 +5,15 @@ from fastapi.responses import JSONResponse
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
 from app.database.assignment_repo import AssignmentRepo
-from app.core.deps import get_repository          # <- spostato in core
-from app.core.auth import get_current_user        # <- la tua auth in core
+from app.core.deps import get_repository      
+
+from app.services.auth_service import AuthService
 from app.services.assignment_service import AssignmentService
 
 router = APIRouter()
 
 RepoDep = Annotated[AssignmentRepo, Depends(get_repository)]
-UserDep = Annotated[UserContext, Depends(get_current_user)]
+UserDep = Annotated[UserContext, Depends(AuthService.get_current_user)]
 
 @router.post("/assignments", status_code=status.HTTP_201_CREATED)
 async def create_assignment_endpoint(
