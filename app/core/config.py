@@ -4,8 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     env: str = os.getenv("ENV", "unit-test")
     jwt_algorithm: str
-    jwt_public_key: str  # contiene direttamente la chiave, non un path
-    jwt_private_key: str
+    jwt_public_key: str 
     mongo_uri: str
     mongo_db_name: str
 
