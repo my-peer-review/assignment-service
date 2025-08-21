@@ -2,11 +2,13 @@
 from datetime import datetime, timezone
 from typing import Sequence, Optional, List
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from uuid import uuid4
+import random 
 
 from app.database.assignment_repo import AssignmentRepo
 from app.schemas.assignment import Assignment, AssignmentCreate
 
+def create_assignment_id() -> str:
+    return f"as-{random.randint(0, 99999):05d}"
 
 class MongoAssignmentRepository(AssignmentRepo):
     def __init__(self, db: AsyncIOMotorDatabase):
@@ -29,7 +31,7 @@ class MongoAssignmentRepository(AssignmentRepo):
         }
 
     async def create(self, data: AssignmentCreate, *, teacher_id: str) -> str:
-        new_id = str(uuid4())
+        new_id = create_assignment_id()
         doc = self._to_doc(new_id, data, teacher_id)
         await self.col.insert_one(doc)
         return new_id
