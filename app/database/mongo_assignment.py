@@ -9,7 +9,7 @@ from app.schemas.assignment import Assignment, AssignmentCreate
 
 def create_assignment_id() -> str:
     # genera un numero tra 10000 e 99999
-    return f"us-{random.randint(00000, 99999)}"
+    return f"as-{random.randint(00000, 99999)}"
 
 class MongoAssignmentRepository(AssignmentRepo):
     def __init__(self, db: AsyncIOMotorDatabase):
