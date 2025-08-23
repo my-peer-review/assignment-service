@@ -5,32 +5,51 @@ from fastapi.responses import JSONResponse
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
 from app.database.assignment_repo import AssignmentRepo
-from app.core.deps import get_repository      
+from app.core.deps import get_repository, get_publisher
 
 from app.services.auth_service import AuthService
 from app.services.assignment_service import AssignmentService
+from app.services.publisher_service import AssignmentPublisher
+
 
 router = APIRouter()
 
 RepoDep = Annotated[AssignmentRepo, Depends(get_repository)]
 UserDep = Annotated[UserContext, Depends(AuthService.get_current_user)]
+PublisherDep = Annotated[AssignmentPublisher, Depends(get_publisher)]
+
 
 @router.post("/assignments", status_code=status.HTTP_201_CREATED)
 async def create_assignment_endpoint(
     assignment: AssignmentCreate,
     user: UserDep,
     repo: RepoDep,
+    publisher: PublisherDep
 ):
     try:
-        new_id = await AssignmentService.create_assignment(assignment, user, repo)
-        location = f"/api/v1/assignments/{new_id}"
+        # La service ritorna: (assignment_id, status, created_at, completed_at)
+        assignment_id, status_value, created_at, completed_at = \
+            await AssignmentService.create_assignment(assignment, user, repo)
+
+        try:
+            await publisher.publish_assignment_status(
+                assignment_id=assignment_id,
+                status=status_value,
+                createAt=created_at,
+                completedAt=completed_at,
+            )
+        except Exception:
+            raise HTTPException(status_code=503, detail=f"Invio evento RabbitMQ fallito: {e}")
+
+        location = f"/api/v1/assignments/{assignment_id}"
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
-            content={"message": "Assignment created successfully.", "id": new_id},
+            content={"message": "Assignment created successfully.", "id": assignment_id},
             headers={"Location": location},
         )
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
+    
 
 @router.get("/assignments", response_model=list[Assignment])
 async def list_assignments_endpoint(
