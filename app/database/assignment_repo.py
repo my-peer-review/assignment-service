@@ -7,7 +7,7 @@ from app.schemas.assignment import Assignment, AssignmentCreate
 
 class AssignmentRepo(ABC):
     @abstractmethod
-    async def create(self, data: AssignmentCreate, *, teacher_id: str) -> str:
+    async def create(self, data: AssignmentCreate) -> str:
         """Crea un assignment e ritorna l'ID generato."""
         raise NotImplementedError
 

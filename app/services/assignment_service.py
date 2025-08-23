@@ -36,7 +36,7 @@ class AssignmentService:
             **data.model_dump(),
         )
 
-        inserted_id = await repo.create(assignment)   # <- tipicamente ritorna l'id
+        inserted_id = await repo.create(assignment)
         if not inserted_id:
             raise RuntimeError("Creazione assignment fallita")
 
