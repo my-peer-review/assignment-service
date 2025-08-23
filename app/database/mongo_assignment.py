@@ -2,39 +2,34 @@
 from datetime import datetime, timezone
 from typing import Sequence, Optional, List
 from motor.motor_asyncio import AsyncIOMotorDatabase
-import random 
 
 from app.database.assignment_repo import AssignmentRepo
-from app.schemas.assignment import Assignment, AssignmentCreate
+from app.schemas.assignment import Assignment
 
-def create_assignment_id() -> str:
-    return f"as-{random.randint(0, 99999):05d}"
 
 class MongoAssignmentRepository(AssignmentRepo):
     def __init__(self, db: AsyncIOMotorDatabase):
         self.col = db["assignments"]
 
     def _from_doc(self, d: dict) -> Assignment:
-        return Assignment(
-            id=str(d["assignmentId"]),
-            createdAt=d["createdAt"],
-            teacherId=d["teacherId"],
-            **{k: v for k, v in d.items() if k not in {"_id", "createdAt", "teacherId"}}
-        )
+        base = {k: v for k, v in d.items() if k not in {"_id"}}
+        return Assignment(**base)
 
-    def _to_doc(self, a_id: str, data: AssignmentCreate, teacher_id: str) -> dict:
-        return {
-            "assignmentId": a_id,
-            "createdAt": datetime.now(timezone.utc),
-            "teacherId": teacher_id,
-            **data.model_dump(),
-        }
+    def _to_doc_from_model(self, a: Assignment) -> dict:
+        doc = a.model_dump()
+        # fallback di sicurezza
+        doc.setdefault("createdAt", datetime.now(timezone.utc))
+        doc.setdefault("status", "open")
+        doc.setdefault("completedAt", None)
+        return doc
 
-    async def create(self, data: AssignmentCreate, *, teacher_id: str) -> str:
-        new_id = create_assignment_id()
-        doc = self._to_doc(new_id, data, teacher_id)
+    async def create(self, assignment: Assignment) -> str:
+        """
+        Inserisce un Assignment completo (con id già generato nel service).
+        """
+        doc = self._to_doc_from_model(assignment)
         await self.col.insert_one(doc)
-        return new_id
+        return assignment.assignmentId
 
     async def find_for_teacher(self, teacher_id: str) -> Sequence[Assignment]:
         cursor = self.col.find({"teacherId": str(teacher_id)})
@@ -53,7 +48,16 @@ class MongoAssignmentRepository(AssignmentRepo):
     async def delete(self, assignment_id: str) -> bool:
         res = await self.col.delete_one({"assignmentId": str(assignment_id)})
         return res.deleted_count > 0
+    
+    async def update_assignment_state(self, now: Optional[datetime] = None) -> int:
+        ts = now or datetime.now(timezone.utc)
+        res = await self.col.update_many(
+            {"deadline": {"$lt": ts}, "status": {"$ne": "completed"}},
+            {"$set": {"status": "completed", "completedAt": ts}},
+        )
+        return res.modified_count or 0
 
     async def ensure_indexes(self):
         await self.col.create_index("teacherId")
         await self.col.create_index("students")
+        await self.col.create_index([("deadline", 1), ("status", 1)])
