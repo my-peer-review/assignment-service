@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Sequence, Optional
+from typing import List, Sequence, Optional, Tuple
 from app.schemas.assignment import Assignment, AssignmentCreate
 
 class AssignmentRepo(ABC):
@@ -32,7 +32,7 @@ class AssignmentRepo(ABC):
         raise NotImplementedError
     
     @abstractmethod
-    async def update_assignment_state(self, now: Optional[datetime] = None) -> int:
+    async def update_assignment_state(self, ts: datetime) -> List[str]:
         """Aggiorna lo stato degli assignment presenti nel database se la sua deadline è minore a now, 
         ritorna il numero di aggiornamente effettuati"""
         raise NotImplementedError

@@ -1,6 +1,6 @@
 # app/repositories/mongo_assignment.py
 from datetime import datetime, timezone
-from typing import Sequence, Optional, List
+from typing import Sequence, Optional, List, Tuple
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database.assignment_repo import AssignmentRepo
@@ -17,7 +17,7 @@ class MongoAssignmentRepository(AssignmentRepo):
 
     def _to_doc_from_model(self, a: Assignment) -> dict:
         doc = a.model_dump()
-        # fallback di sicurezza
+
         doc.setdefault("createdAt", datetime.now(timezone.utc))
         doc.setdefault("status", "open")
         doc.setdefault("completedAt", None)
@@ -49,14 +49,26 @@ class MongoAssignmentRepository(AssignmentRepo):
         res = await self.col.delete_one({"assignmentId": str(assignment_id)})
         return res.deleted_count > 0
     
-    async def update_assignment_state(self, now: Optional[datetime] = None) -> int:
-        ts = now or datetime.now(timezone.utc)
+    async def update_assignment_state(self, ts: datetime) -> List[str]:
+
+        # 1) Leggo gli assignment scaduti e non completati
+        filt = {"deadline": {"$lt": ts}, "status": {"$ne": "completed"}}
+        docs = await self.col.find(filt, {"_id": 1, "assignmentId": 1}).to_list(length=None)
+        if not docs:
+            return ([])
+
+        ids = [d["_id"] for d in docs]
+        assignment_ids = [d.get("assignmentId") for d in docs if d.get("assignmentId") is not None]
+
+        # 2) Aggiorno solo quelli trovati
         res = await self.col.update_many(
-            {"deadline": {"$lt": ts}, "status": {"$ne": "completed"}},
+            {"_id": {"$in": ids}, "status": {"$ne": "completed"}},
             {"$set": {"status": "completed", "completedAt": ts}},
         )
-        return res.modified_count or 0
 
+        if (res.modified_count > 0):
+            return assignment_ids
+    
     async def ensure_indexes(self):
         await self.col.create_index("teacherId")
         await self.col.create_index("students")

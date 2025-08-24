@@ -10,21 +10,20 @@ from aio_pika.abc import AbstractRobustConnection, AbstractRobustChannel, Abstra
 
 logger = logging.getLogger(__name__)
 
-
 class AssignmentPublisher:
 
     def __init__(
         self,
         rabbitmq_url: str,
         heartbeat: int,
-        review_exchange: str = "elearning.report",
-        review_routing_key: str = "assignment.report",
-        queue_name: Optional[str] = None,
+        exchange: str = "elearning.reports",
+        routing_key: str = "assignments.reports",
+        queue_name: str = "assignments.reports",
     ) -> None:
         self.rabbitmq_url = rabbitmq_url
         self.heartbeat = heartbeat
-        self.review_exchange_name = review_exchange
-        self.review_routing_key = review_routing_key
+        self.exchange_name = exchange
+        self.routing_key = routing_key
         self.queue_name = queue_name  # se None, verrà creata una coda esclusiva e temporanea
 
         self._conn: Optional[AbstractRobustConnection] = None
@@ -44,7 +43,7 @@ class AssignmentPublisher:
                 await self._channel.set_qos(prefetch_count=10)
 
                 self._exchange = await self._channel.declare_exchange(
-                    self.review_exchange_name, ExchangeType.DIRECT, durable=True
+                    self.exchange_name, ExchangeType.DIRECT, durable=True
                 )
 
                 logger.info("Connessione a RabbitMQ stabilita.")
@@ -87,15 +86,14 @@ class AssignmentPublisher:
             logger.debug("Exchange non presente in cache: lo dichiaro/recupero.")
             assert self._channel is not None
             self._exchange = await self._channel.declare_exchange(
-                self.review_exchange_name, ExchangeType.DIRECT, durable=True
+                self.exchange_name, ExchangeType.DIRECT, durable=True
             )
 
     async def publish_assignment_status(
         self,
-        assignment_id: str,
+        assignmentId: str,
         status: str,
-        createAt: datetime,
-        completedAt: datetime
+        teacherId: Optional[str] = None,
     ) -> None:
         """
         Pubblica un messaggio di cambiamento stato assignment con payload JSON:
@@ -105,10 +103,9 @@ class AssignmentPublisher:
         assert self._exchange is not None
 
         payload = {
-            "assignmentId": assignment_id,
+            "assignmentId": assignmentId,
             "status": status,
-            "createdAt": createAt.isoformat(),
-            "completedAt": completedAt.isoformat() if completedAt else None,
+            "teacherId": teacherId
         }
 
         body = json.dumps(payload).encode("utf-8")
@@ -116,22 +113,22 @@ class AssignmentPublisher:
             body=body,
             content_type="application/json",
             delivery_mode=DeliveryMode.NOT_PERSISTENT,
-            message_id=assignment_id,
+            message_id=assignmentId,
             headers={"eventType": "assignment.status.changed"},
         )
 
         logger.debug(
             "Publishing su exchange=%s, routing_key=%s, payload=%s",
-            self.review_exchange_name,
-            self.review_routing_key,
+            self.exchange_name,
+            self.routing_key,
             payload,
         )
 
         try:
-            await self._exchange.publish(msg, routing_key=self.review_routing_key)
+            await self._exchange.publish(msg, routing_key=self.routing_key, mandatory=True)
             logger.debug(
-                "Messaggio pubblicato con successo (assignment_id=%s, status=%s).",
-                assignment_id, status
+                "Messaggio pubblicato con successo (assignmentId=%s, status=%s).",
+                assignmentId, status
             )
         except Exception as exc:
             logger.exception("Errore durante la pubblicazione del messaggio: %s", exc)

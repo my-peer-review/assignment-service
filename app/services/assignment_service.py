@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import random
-from typing import Sequence, Optional, Tuple
+from typing import List, Sequence, Optional, Tuple
 from app.schemas.assignment import AssignmentCreate, Assignment
 from app.schemas.context import UserContext
 from app.database.assignment_repo import AssignmentRepo
@@ -22,7 +22,7 @@ class AssignmentService:
         data: AssignmentCreate,
         user: UserContext,
         repo: AssignmentRepo
-    ) -> Tuple[str, str, datetime, Optional[datetime]]:
+    ) -> str:
         if not _is_teacher(user.role):
             raise PermissionError("Only teachers can create assignments")
 
@@ -41,7 +41,7 @@ class AssignmentService:
             raise RuntimeError("Creazione assignment fallita")
 
         # ritorna esattamente ciò che ti serve per RabbitMQ
-        return inserted_id, assignment.status, assignment.createdAt, assignment.completedAt
+        return inserted_id
 
 
     @staticmethod
@@ -70,10 +70,15 @@ class AssignmentService:
         return await repo.delete(assignment_id)
     
     @staticmethod
-    async def sweep_deadlines(repo: AssignmentRepo, now: Optional[datetime] = None) -> int:
+    async def sweep_deadlines(repo: AssignmentRepo) -> List[str]:
         """
         Esegue UNA passata: segna 'completed' gli assignment con deadline < now.
         Ritorna il numero di documenti aggiornati.
         """
-        ts = now or datetime.now(timezone.utc)
-        return await repo.update_assignment_state(now=ts)
+        ts = datetime.now(timezone.utc)
+        # normalizzazione: tronca ai millisecondi
+        ts = ts.replace(microsecond=(ts.microsecond // 1000) * 1000)
+
+        return await repo.update_assignment_state(ts)
+
+        
