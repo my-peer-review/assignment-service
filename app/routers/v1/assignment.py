@@ -28,17 +28,15 @@ async def create_assignment_endpoint(
 ):
     try:
         # La service ritorna: (assignment_id, status, created_at, completed_at)
-        assignment_id, status_value, created_at, completed_at = \
-            await AssignmentService.create_assignment(assignment, user, repo)
+        assignment_id = await AssignmentService.create_assignment(assignment, user, repo)
 
         try:
             await publisher.publish_assignment_status(
-                assignment_id=assignment_id,
-                status=status_value,
-                createAt=created_at,
-                completedAt=completed_at,
+                assignmentId=assignment_id,
+                teacherId=user.user_id,
+                status="open"
             )
-        except Exception:
+        except Exception as e:
             raise HTTPException(status_code=503, detail=f"Invio evento RabbitMQ fallito: {e}")
 
         location = f"/api/v1/assignments/{assignment_id}"
