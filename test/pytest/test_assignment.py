@@ -1,4 +1,4 @@
-# tests/unit/test_assignment_service.py
+# tests/unit/test_assignment_service.py (fixed)
 import pytest
 from datetime import datetime, timedelta, timezone
 
@@ -83,7 +83,7 @@ async def test_create_requires_teacher(repo, student):
 
 @pytest.mark.asyncio
 async def test_create_ok(repo, teacher):
-    new_id, status, created_at, completed_at = await AssignmentService.create_assignment(
+    new_id = await AssignmentService.create_assignment(
         _make_create(students=["s1", "s2"]), teacher, repo
     )
     assert new_id
@@ -91,15 +91,15 @@ async def test_create_ok(repo, teacher):
     assert saved is not None
     assert saved.teacherId == "t1"
     assert saved.students == ["s1", "s2"]
-    assert status == "open"
-    assert completed_at is None
-    assert isinstance(created_at, datetime)
+    assert saved.status == "open"
+    assert saved.completedAt is None
+    assert isinstance(saved.createdAt, datetime)
 
 @pytest.mark.asyncio
 async def test_list_for_teacher(repo, teacher, other_teacher):
-    a1, *_ = await AssignmentService.create_assignment(_make_create(title="A"), teacher, repo)
-    a2, *_ = await AssignmentService.create_assignment(_make_create(title="B"), teacher, repo)
-    _ , *_ = await AssignmentService.create_assignment(_make_create(title="C"), other_teacher, repo)
+    a1 = await AssignmentService.create_assignment(_make_create(title="A"), teacher, repo)
+    a2 = await AssignmentService.create_assignment(_make_create(title="B"), teacher, repo)
+    _ = await AssignmentService.create_assignment(_make_create(title="C"), other_teacher, repo)
 
     items = await AssignmentService.list_assignments(teacher, repo)
     ids = {a.assignmentId for a in items}
@@ -109,8 +109,8 @@ async def test_list_for_teacher(repo, teacher, other_teacher):
 
 @pytest.mark.asyncio
 async def test_list_for_student(repo, teacher, student):
-    _ , *_ = await AssignmentService.create_assignment(_make_create(title="SoloS1", students=["s1"]), teacher, repo)
-    _ , *_ = await AssignmentService.create_assignment(_make_create(title="SoloS2", students=["s2"]), teacher, repo)
+    _ = await AssignmentService.create_assignment(_make_create(title="SoloS1", students=["s1"]), teacher, repo)
+    _ = await AssignmentService.create_assignment(_make_create(title="SoloS2", students=["s2"]), teacher, repo)
 
     items = await AssignmentService.list_assignments(student, repo)
     assert len(items) == 1
@@ -124,7 +124,7 @@ async def test_list_other_role_returns_empty(repo):
 
 @pytest.mark.asyncio
 async def test_get_teacher_access_ok(repo, teacher, other_teacher):
-    aid, *_ = await AssignmentService.create_assignment(_make_create(title="X"), teacher, repo)
+    aid = await AssignmentService.create_assignment(_make_create(title="X"), teacher, repo)
     item = await AssignmentService.get_assignment(aid, teacher, repo)
     assert item is not None
     with pytest.raises(PermissionError):
@@ -132,7 +132,7 @@ async def test_get_teacher_access_ok(repo, teacher, other_teacher):
 
 @pytest.mark.asyncio
 async def test_get_student_access_ok_and_denied(repo, teacher, student, student2):
-    aid, *_ = await AssignmentService.create_assignment(_make_create(title="X", students=["s1"]), teacher, repo)
+    aid = await AssignmentService.create_assignment(_make_create(title="X", students=["s1"]), teacher, repo)
     ok = await AssignmentService.get_assignment(aid, student, repo)
     assert ok is not None
     with pytest.raises(PermissionError):
@@ -145,6 +145,6 @@ async def test_delete_requires_teacher(repo, student):
 
 @pytest.mark.asyncio
 async def test_delete_ok_and_not_found(repo, teacher):
-    aid, *_ = await AssignmentService.create_assignment(_make_create(), teacher, repo)
+    aid = await AssignmentService.create_assignment(_make_create(), teacher, repo)
     assert await AssignmentService.delete_assignment(aid, teacher, repo) is True
     assert await AssignmentService.delete_assignment(aid, teacher, repo) is False
